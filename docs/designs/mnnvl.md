@@ -39,7 +39,7 @@ This document captures the **Phase 1 requirements** for automatic **MNNVL (Multi
 | **REQ-6-b** | Pods that request GPUs using **DRA only** will **not** be treated as GPU pods for RCT injection.<br/><br/>This will be addressed in Phase 2. |
 | **REQ-7** | Failure behavior and error handling (see dedicated section below). |
 | **REQ-8** | Observability and status reporting (see dedicated section below). |
-| **REQ-9** | When MNNVL is enabled, users must be allowed to **opt out** of MNNVL when creating a new PCS.<br/><br/>This choice must be **immutable** — updating an existing PCS to opt out is not allowed.<br/><br/>Rationale: since only one ComputeDomain can exist per node, users may opt out to improve scheduling latency. |
+| **REQ-9** | When MNNVL is enabled, users must be allowed to **opt out** of MNNVL when creating a new PCS.<br/><br/>This choice must be **immutable** — updating an existing PCS to opt out is not allowed.<br/><br/>Rationale: since only one ComputeDomain can exist per node, users may need to opt out when MNNVL is broken and want to fall back to InfiniBand, RoCE, or TCP. |
 | **REQ-10** | When the MNNVL feature is disabled after being enabled:<br/>• Existing workloads must remain unchanged.<br/>• Workloads created with MNNVL enabled must keep CD and RCT active.<br/>• All new PCS instances must be created without MNNVL. |
 
 ---
