@@ -18,8 +18,13 @@ package setup
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +32,7 @@ import (
 	"github.com/ai-dynamo/grove/operator/e2e/utils"
 	"github.com/ai-dynamo/grove/operator/internal/utils/ioutil"
 	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/registry"
 	dockerclient "github.com/docker/docker/client"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -484,17 +490,25 @@ func SetupRegistryTestImages(registryPort string, images []string) error {
 	for _, imageName := range images {
 		registryImage := fmt.Sprintf("localhost:%s/%s", registryPort, imageName)
 
-		// Step 1: Pull the image
-		pullReader, err := cli.ImagePull(ctx, imageName, image.PullOptions{})
+		// Step 1: Check if image already exists locally, otherwise pull it
+		_, _, err = cli.ImageInspectWithRaw(ctx, imageName)
 		if err != nil {
-			return fmt.Errorf("failed to pull %s: %w", imageName, err)
-		}
+			// Image doesn't exist locally, need to pull it
+			pullOpts := image.PullOptions{}
+			if authStr := getDockerAuthForImage(imageName); authStr != "" {
+				pullOpts.RegistryAuth = authStr
+			}
+			pullReader, pullErr := cli.ImagePull(ctx, imageName, pullOpts)
+			if pullErr != nil {
+				return fmt.Errorf("failed to pull %s: %w", imageName, pullErr)
+			}
 
-		// Consume the pull output to avoid blocking
-		_, err = io.Copy(io.Discard, pullReader)
-		ioutil.CloseQuietly(pullReader)
-		if err != nil {
-			return fmt.Errorf("failed to read pull output for %s: %w", imageName, err)
+			// Consume the pull output to avoid blocking
+			_, pullErr = io.Copy(io.Discard, pullReader)
+			ioutil.CloseQuietly(pullReader)
+			if pullErr != nil {
+				return fmt.Errorf("failed to read pull output for %s: %w", imageName, pullErr)
+			}
 		}
 
 		// Step 2: Tag the image for the local registry
