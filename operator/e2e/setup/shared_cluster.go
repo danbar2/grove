@@ -53,6 +53,12 @@ const (
 
 	// cleanupPollInterval is the interval between checks during cleanup polling
 	cleanupPollInterval = 1 * time.Second
+
+	// defaultDockerRegistry is the default Docker Hub registry URL
+	defaultDockerRegistry = "https://index.docker.io/v1/"
+
+	// defaultDockerConfigPath is the default path to Docker config file relative to home directory
+	defaultDockerConfigPath = ".docker/config.json"
 )
 
 // resourceType represents a Kubernetes resource type for cleanup operations
@@ -495,9 +501,11 @@ func SetupRegistryTestImages(registryPort string, images []string) error {
 		if err != nil {
 			// Image doesn't exist locally, need to pull it
 			pullOpts := image.PullOptions{}
-			if authStr := getDockerAuthForImage(imageName); authStr != "" {
+			authStr, authErr := getDockerAuthForImage(imageName, defaultDockerRegistry, defaultDockerConfigPath)
+			if authErr == nil {
 				pullOpts.RegistryAuth = authStr
 			}
+			// Ignore auth errors and attempt pull without auth - may work for public images
 			pullReader, pullErr := cli.ImagePull(ctx, imageName, pullOpts)
 			if pullErr != nil {
 				return fmt.Errorf("failed to pull %s: %w", imageName, pullErr)
