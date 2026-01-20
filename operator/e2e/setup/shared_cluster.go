@@ -497,26 +497,8 @@ func SetupRegistryTestImages(registryPort string, images []string) error {
 		registryImage := fmt.Sprintf("localhost:%s/%s", registryPort, imageName)
 
 		// Step 1: Check if image already exists locally, otherwise pull it
-		_, _, err = cli.ImageInspectWithRaw(ctx, imageName)
-		if err != nil {
-			// Image doesn't exist locally, need to pull it
-			pullOpts := image.PullOptions{}
-			authStr, authErr := getDockerAuthForImage(imageName, defaultDockerRegistry, defaultDockerConfigPath)
-			if authErr == nil {
-				pullOpts.RegistryAuth = authStr
-			}
-			// Ignore auth errors and attempt pull without auth - may work for public images
-			pullReader, pullErr := cli.ImagePull(ctx, imageName, pullOpts)
-			if pullErr != nil {
-				return fmt.Errorf("failed to pull %s: %w", imageName, pullErr)
-			}
-
-			// Consume the pull output to avoid blocking
-			_, pullErr = io.Copy(io.Discard, pullReader)
-			ioutil.CloseQuietly(pullReader)
-			if pullErr != nil {
-				return fmt.Errorf("failed to read pull output for %s: %w", imageName, pullErr)
-			}
+		if err := pullImageIfNotExists(ctx, cli, imageName, nil); err != nil {
+			return err
 		}
 
 		// Step 2: Tag the image for the local registry
