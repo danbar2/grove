@@ -49,10 +49,8 @@ func Test_RU7_RollingUpdatePCSPodClique(t *testing.T) {
 		t.Fatalf("Failed to update PodClique spec: %v", err)
 	}
 
-	// With MaxSurge rolling update strategy, each pod requires: create surge pod -> wait Ready -> delete old pod
-	// This takes longer than delete-first approach, so we use a longer timeout
 	tcLongTimeout := tc
-	tcLongTimeout.Timeout = 5 * time.Minute
+	tcLongTimeout.Timeout = 1 * time.Minute
 	if err := waitForRollingUpdateComplete(tcLongTimeout, 1); err != nil {
 		// Diagnostics will be collected automatically by cleanup on test failure
 		t.Fatalf("Failed to wait for rolling update to complete: %v", err)
