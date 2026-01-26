@@ -223,12 +223,13 @@ func Test_RU10_RollingUpdateInsufficientResources(t *testing.T) {
 	}
 
 	logger.Info("5. Verify exactly one pod is deleted and a new Pending pod is created (delete-first strategy)")
-	time.Sleep(1 * time.Minute)
 
 	// Verify that exactly one existing pod was deleted (delete-first strategy)
-	events := tracker.getEvents()
 	var deletedExistingPods []string
 	var addedPods []string
+
+	// Process events to find deleted and added pods
+	events := tracker.getEvents()
 	for _, event := range events {
 		switch event.Type {
 		case watch.Deleted:
@@ -242,30 +243,23 @@ func Test_RU10_RollingUpdateInsufficientResources(t *testing.T) {
 				logger.Debugf("New pod created during rolling update: %s", event.Pod.Name)
 			}
 		}
-
-		// Check if we've reached the expected delete-first state
-		deletedCount := len(deletedExistingPods)
-		addedCount := len(addedPods)
-
-		// If more than 1 pod was deleted, the test should fail (not delete-first)
-		if deletedCount > 1 {
-			return false, fmt.Errorf("rolling update progressed beyond first deletion - expected 1 pod deleted but got %d: %v (not delete-first strategy)", deletedCount, deletedExistingPods)
-		}
-
-		// Success: exactly 1 deleted and 1 new pod created
-		if deletedCount == 1 && addedCount == 1 {
-			logger.Infof("✅ Delete-first strategy verified: 1 pod deleted (%v), 1 new pod created (%v)", deletedExistingPods, addedPods)
-			return true, nil
-		}
-
-		// Still waiting for the condition
-		logger.Debugf("Waiting for delete-first state: deleted=%d (want 1), added=%d (want 1)", deletedCount, addedCount)
-		return false, nil
-	})
-
-	if pollErr != nil {
-		t.Fatalf("Failed to verify delete-first strategy: %v", pollErr)
 	}
+
+	// Check if we've reached the expected delete-first state
+	deletedCount := len(deletedExistingPods)
+	addedCount := len(addedPods)
+
+	// If more than 1 pod was deleted, the test should fail (not delete-first)
+	if deletedCount > 1 {
+		t.Fatalf("Rolling update progressed beyond first deletion - expected 1 pod deleted but got %d: %v (not delete-first strategy)", deletedCount, deletedExistingPods)
+	}
+
+	// Success: exactly 1 deleted and 1 new pod created
+	if deletedCount != 1 || addedCount != 1 {
+		t.Fatalf("Expected exactly 1 pod deleted and 1 pod added (delete-first strategy), but got deleted=%d, added=%d", deletedCount, addedCount)
+	}
+
+	logger.Infof("✅ Delete-first strategy verified: 1 pod deleted (%v), 1 new pod created (%v)", deletedExistingPods, addedPods)
 
 	// Delete-first strategy: exactly 1 pod should be deleted
 	if len(deletedExistingPods) != 1 {
