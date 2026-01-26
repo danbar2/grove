@@ -57,6 +57,21 @@ To trigger e2e tests on a draft PR:
 
 The CI workflow is defined in `.github/workflows/e2e-test.yaml`.
 
+#### Cluster Type
+
+E2E tests support two cluster types:
+- **K3D** (default for local development): Creates a k3d cluster with 30 worker nodes and local registry
+- **Kind** (used in CI): Uses Kind cluster with GitHub Actions standard runners
+
+The cluster type is controlled by the `E2E_CLUSTER_TYPE` environment variable:
+```bash
+# Use Kind cluster (as in CI)
+E2E_CLUSTER_TYPE=kind make test-e2e
+
+# Use K3D cluster (default)
+make test-e2e
+```
+
 ## Managing Dependencies
 
 E2E test dependencies (container images and Helm charts) are managed in `dependencies.yaml`, similar to how Go dependencies are managed in `go.mod`.

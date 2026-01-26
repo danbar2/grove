@@ -644,8 +644,6 @@ func InstallCoreComponents(ctx context.Context, restConfig *rest.Config, kaiConf
 				SkaffoldYAMLPath: absoluteSkaffoldYAMLPath,
 				RestConfig:       restConfig,
 				Profiles:         []string{"topology-test"},
-				PushRepo:         fmt.Sprintf("localhost:%s", registryPort),
-				PullRepo:         fmt.Sprintf("registry:%s", registryPort),
 				Namespace:        OperatorNamespace,
 				Env: map[string]string{
 					"VERSION":  "E2E_TESTS",
@@ -653,6 +651,13 @@ func InstallCoreComponents(ctx context.Context, restConfig *rest.Config, kaiConf
 				},
 				Logger: logger,
 			}
+
+			// Only configure registry repos for k3d clusters (registryPort will be empty for Kind)
+			if registryPort != "" {
+				skaffoldConfig.PushRepo = fmt.Sprintf("localhost:%s", registryPort)
+				skaffoldConfig.PullRepo = fmt.Sprintf("registry:%s", registryPort)
+			}
+
 			cleanup, err := InstallWithSkaffold(ctx, skaffoldConfig)
 			if cleanup != nil {
 				defer cleanup()

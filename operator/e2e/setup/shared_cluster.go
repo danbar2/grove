@@ -125,17 +125,33 @@ func (scm *SharedClusterManager) Setup(ctx context.Context, testImages []string)
 	// Track whether setup completed successfully
 	var setupSuccessful bool
 
-	// Use the centralized cluster config with overrides for shared test cluster
-	customCfg := DefaultClusterConfig()
-	customCfg.Name = "shared-e2e-test-cluster"
-	customCfg.HostPort = "6560"         // Use a different port to avoid conflicts
-	customCfg.LoadBalancerPort = "8090:80"
+	// Detect cluster type from environment variable (default to k3d for backward compatibility)
+	clusterType := os.Getenv("E2E_CLUSTER_TYPE")
+	if clusterType == "" {
+		clusterType = "k3d"
+	}
 
-	scm.registryPort = customCfg.RegistryPort
+	var restConfig *rest.Config
+	var cleanup func()
+	var err error
 
-	scm.logger.Info("🚀 Setting up shared k3d cluster for all e2e tests...")
+	if clusterType == "kind" {
+		scm.logger.Info("🚀 Setting up shared Kind cluster for all e2e tests...")
+		restConfig, cleanup, err = SetupCompleteKindCluster(ctx, "shared-e2e-test-cluster", relativeSkaffoldYAMLPath, scm.logger)
+		scm.registryPort = "" // Kind doesn't use a separate registry in CI
+	} else {
+		// Use the centralized cluster config with overrides for shared test cluster
+		customCfg := DefaultClusterConfig()
+		customCfg.Name = "shared-e2e-test-cluster"
+		customCfg.HostPort = "6560"         // Use a different port to avoid conflicts
+		customCfg.LoadBalancerPort = "8090:80"
 
-	restConfig, cleanup, err := SetupCompleteK3DCluster(ctx, customCfg, relativeSkaffoldYAMLPath, scm.logger)
+		scm.registryPort = customCfg.RegistryPort
+
+		scm.logger.Info("🚀 Setting up shared k3d cluster for all e2e tests...")
+		restConfig, cleanup, err = SetupCompleteK3DCluster(ctx, customCfg, relativeSkaffoldYAMLPath, scm.logger)
+	}
+
 	// Defer cleanup on error - only call if setup was not successful and we have a cleanup function
 	defer func() {
 		if !setupSuccessful && cleanup != nil {
@@ -143,7 +159,7 @@ func (scm *SharedClusterManager) Setup(ctx context.Context, testImages []string)
 		}
 	}()
 	if err != nil {
-		return fmt.Errorf("failed to setup shared k3d cluster: %w", err)
+		return fmt.Errorf("failed to setup shared %s cluster: %w", clusterType, err)
 	}
 
 	scm.restConfig = restConfig
@@ -163,9 +179,13 @@ func (scm *SharedClusterManager) Setup(ctx context.Context, testImages []string)
 	}
 	scm.dynamicClient = dynamicClient
 
-	// Setup test images in registry
-	if err := SetupRegistryTestImages(scm.registryPort, testImages); err != nil {
-		return fmt.Errorf("failed to setup registry test images: %w", err)
+	// Setup test images in registry (only for k3d clusters with registry)
+	if scm.registryPort != "" {
+		if err := SetupRegistryTestImages(scm.registryPort, testImages); err != nil {
+			return fmt.Errorf("failed to setup registry test images: %w", err)
+		}
+	} else {
+		scm.logger.Debug("Skipping registry test images setup (Kind cluster detected)")
 	}
 
 	// Get list of worker nodes for cordoning management
