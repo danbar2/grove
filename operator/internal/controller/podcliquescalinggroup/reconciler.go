@@ -35,8 +35,10 @@ import (
 
 // Reconciler reconciles PodCliqueScalingGroup objects.
 type Reconciler struct {
-	config                  groveconfigv1alpha1.PodCliqueScalingGroupControllerConfiguration
-	client                  ctrlclient.Client
+	config groveconfigv1alpha1.PodCliqueScalingGroupControllerConfiguration
+	client ctrlclient.Client
+	// apiReader bypasses the informer cache; only the reconciled object is read through it.
+	apiReader               ctrlclient.Reader
 	eventRecorder           record.EventRecorder
 	reconcileStatusRecorder ctrlcommon.ReconcileErrorRecorder
 	operatorRegistry        component.OperatorRegistry[grovecorev1alpha1.PodCliqueScalingGroup]
@@ -49,6 +51,7 @@ func NewReconciler(mgr ctrl.Manager, controllerCfg groveconfigv1alpha1.PodClique
 	return &Reconciler{
 		config:                  controllerCfg,
 		client:                  client,
+		apiReader:               mgr.GetAPIReader(),
 		eventRecorder:           eventRecorder,
 		reconcileStatusRecorder: ctrlcommon.NewReconcileErrorRecorder(client),
 		operatorRegistry:        pcsgcomponent.CreateOperatorRegistry(mgr, eventRecorder),
@@ -56,6 +59,11 @@ func NewReconciler(mgr ctrl.Manager, controllerCfg groveconfigv1alpha1.PodClique
 }
 
 // Reconcile reconciles a PodCliqueScalingGroup resource.
+//
+// The PodCliqueScalingGroup is read through apiReader rather than the cache: reconcileStatus skips its
+// write when the recomputed status matches the status the object was loaded with, which is only sound
+// against an authoritative read. Child PodClique reads and the parent PodCliqueSet lookup stay
+// cache-backed.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrllogger.FromContext(ctx).WithName(controllerName)
 
@@ -63,7 +71,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	ctx = componentutils.WithPodCliqueSetCache(ctx)
 
 	pcsg := &grovecorev1alpha1.PodCliqueScalingGroup{}
-	if result := ctrlutils.GetPodCliqueScalingGroup(ctx, r.client, logger, req.NamespacedName, pcsg); ctrlcommon.ShortCircuitReconcileFlow(result) {
+	if result := ctrlutils.GetPodCliqueScalingGroup(ctx, r.apiReader, logger, req.NamespacedName, pcsg); ctrlcommon.ShortCircuitReconcileFlow(result) {
 		return result.Result()
 	}
 

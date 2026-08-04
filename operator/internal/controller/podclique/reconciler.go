@@ -37,8 +37,10 @@ import (
 
 // Reconciler reconciles PodClique objects.
 type Reconciler struct {
-	config                  configv1alpha1.PodCliqueControllerConfiguration
-	client                  ctrlclient.Client
+	config configv1alpha1.PodCliqueControllerConfiguration
+	client ctrlclient.Client
+	// apiReader bypasses the informer cache; only the reconciled object is read through it.
+	apiReader               ctrlclient.Reader
 	eventRecorder           record.EventRecorder
 	reconcileStatusRecorder ctrlcommon.ReconcileErrorRecorder
 	expectationsStore       *expect.ExpectationsStore
@@ -52,6 +54,7 @@ func NewReconciler(mgr ctrl.Manager, controllerCfg configv1alpha1.PodCliqueContr
 	return &Reconciler{
 		config:                  controllerCfg,
 		client:                  mgr.GetClient(),
+		apiReader:               mgr.GetAPIReader(),
 		eventRecorder:           eventRecorder,
 		reconcileStatusRecorder: ctrlcommon.NewReconcileErrorRecorder(mgr.GetClient()),
 		expectationsStore:       expectationsStore,
@@ -60,6 +63,10 @@ func NewReconciler(mgr ctrl.Manager, controllerCfg configv1alpha1.PodCliqueContr
 }
 
 // Reconcile reconciles the `PodClique` resource.
+//
+// The PodClique is read through apiReader rather than the cache: reconcileStatus skips its write when
+// the recomputed status matches the status the object was loaded with, which is only sound against an
+// authoritative read. Pod reads and the parent PodCliqueSet lookup stay cache-backed.
 func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	logger := ctrllogger.FromContext(ctx).WithName(controllerName)
 
@@ -70,7 +77,7 @@ func (r *Reconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Resu
 	ctx = componentutils.WithPodCliqueSetCache(ctx)
 
 	pclq := &grovecorev1alpha1.PodClique{}
-	if result := ctrlutils.GetPodClique(ctx, r.client, logger, req.NamespacedName, pclq, true); ctrlcommon.ShortCircuitReconcileFlow(result) {
+	if result := ctrlutils.GetPodClique(ctx, r.apiReader, logger, req.NamespacedName, pclq, true); ctrlcommon.ShortCircuitReconcileFlow(result) {
 		return result.Result()
 	}
 
